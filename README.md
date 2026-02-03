@@ -1,0 +1,201 @@
+# AI-RRM Report Generator
+
+Automated tool to collect AI-RRM (AI Radio Resource Management) metrics from Cisco DNA Center and generate comprehensive PDF reports.
+
+## Features
+
+- 🔐 Automatic authentication with DNA Center
+- 🏢 Discovers all buildings with AI-RRM enabled
+- 📊 Collects metrics across 2.4, 5, and 6 GHz frequency bands
+- 📈 Tracks AP count, client count, RRM performance scores, and changes
+- 💡 Captures and reports AI-generated insights
+- 🚨 Highlights buildings requiring attention
+- 📄 Generates professional PDF reports
+
+## Metrics Collected
+
+For each building and frequency band:
+- **AP Count** - Number of access points
+- **Client Count** - Number of connected clients
+- **RRM Health Score** - Performance score (0-100)
+- **RRM Changes** - Number of RRM optimization changes
+- **Insights** - AI-generated recommendations and observations
+
+## Requirements
+
+- Python 3.7+
+- Access to Cisco DNA Center with AI-RRM enabled
+- Network connectivity to DNA Center
+
+## Installation
+
+1. Clone or download this repository
+
+2. Create a virtual environment and activate it:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your DNA Center credentials
+```
+
+## Configuration
+
+Edit the `.env` file with your DNA Center details:
+
+```bash
+DNA_CENTER_URL=https://your-dnac-server.com
+DNA_CENTER_USERNAME=admin
+DNA_CENTER_PASSWORD=your_password
+
+# Optional
+VERIFY_SSL=false  # Set to true if using valid SSL certificates
+LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
+```
+
+## Usage
+
+### Basic Usage
+
+Generate a report with default settings:
+```bash
+python airrm_report.py
+```
+
+This will create a PDF report in the `output/` directory with a timestamp.
+
+### Command Line Options
+
+```bash
+python airrm_report.py [OPTIONS]
+
+Options:
+  -o, --output PATH       Output PDF file path
+                          (default: output/airrm_report_YYYYMMDD_HHMMSS.pdf)
+  
+  --log-level LEVEL       Set logging level: DEBUG, INFO, WARNING, ERROR
+                          (default: INFO)
+  
+  --no-verify-ssl         Disable SSL certificate verification
+                          (useful for self-signed certificates)
+  
+  -h, --help              Show help message
+```
+
+### Examples
+
+Generate report with custom output path:
+```bash
+python airrm_report.py -o reports/monthly_report.pdf
+```
+
+Enable debug logging:
+```bash
+python airrm_report.py --log-level DEBUG
+```
+
+Disable SSL verification (for self-signed certificates):
+```bash
+python airrm_report.py --no-verify-ssl
+```
+
+## Report Sections
+
+The generated PDF report includes:
+
+1. **Executive Summary** - High-level statistics
+   - Total buildings monitored
+   - Buildings requiring attention
+   - Total APs and clients
+   - Average health score
+
+2. **Buildings Requiring Attention** - Highlighted issues
+   - Buildings with low health scores (< 70)
+   - Buildings with active insights
+   - Buildings with high RRM change counts
+
+3. **All Buildings - Detailed Metrics** - Comprehensive table
+   - All metrics for all buildings and frequencies
+
+4. **Detailed Insights** - AI-generated recommendations
+   - Full insight descriptions and reasons
+
+## Troubleshooting
+
+### Authentication Fails
+- Verify DNA_CENTER_URL, USERNAME, and PASSWORD in .env
+- Check network connectivity to DNA Center
+- Ensure user has appropriate permissions
+
+### SSL Certificate Errors
+- Use `--no-verify-ssl` flag for self-signed certificates
+- Or set `VERIFY_SSL=false` in .env file
+
+### No Buildings Found
+- Verify buildings have AI-RRM profiles assigned
+- Check user has access to view AI-RRM configuration
+
+### Missing Metrics
+- Some buildings may not have data for all frequency bands
+- Check DNA Center logs for data collection issues
+
+## Logging
+
+Logs are written to:
+- Console (stdout)
+- `airrm_report.log` file in the current directory
+
+Adjust log level with `--log-level` option for more or less detail.
+
+## Automation
+
+### Scheduled Reports (Linux/macOS)
+
+Add to crontab for weekly reports:
+```bash
+# Every Monday at 8 AM
+0 8 * * 1 cd /path/to/airrm-report && ./venv/bin/python airrm_report.py
+```
+
+### Scheduled Reports (Windows)
+
+Use Windows Task Scheduler to run:
+```bash
+C:\path\to\airrm-report\venv\Scripts\python.exe airrm_report.py
+```
+
+## Project Structure
+
+```
+airrm-report/
+├── airrm_report.py       # Main script
+├── src/
+│   ├── auth.py           # Authentication module
+│   ├── api_client.py     # DNA Center API client
+│   ├── data_collector.py # Metrics collection
+│   └── pdf_generator.py  # PDF report generation
+├── output/               # Generated reports
+├── requirements.txt      # Python dependencies
+├── .env.example          # Environment variable template
+└── README.md            # This file
+```
+
+## Support
+
+For issues or questions:
+1. Check the troubleshooting section above
+2. Review logs with `--log-level DEBUG`
+3. Verify DNA Center API access and permissions
+
+## License
+
+Internal use only - Cisco DNA Center integration tool

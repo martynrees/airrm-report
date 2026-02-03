@@ -1,0 +1,321 @@
+"""
+Data collection module for AI-RRM metrics.
+
+This module orchestrates the collection of AI-RRM performance metrics
+from DNA Center across multiple buildings and frequency bands. It provides
+data structures and collection logic for generating comprehensive reports.
+"""
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List
+
+from api_client import DNACenterClient
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BuildingMetrics:
+    """
+    Metrics for a single building and frequency band.
+
+    This dataclass stores all collected metrics for one building at
+    one specific frequency (2.4, 5, or 6 GHz) including performance
+    data, coverage statistics, and AI-generated insights.
+    """
+
+    building_id: str
+    building_name: str
+    building_hierarchy: str
+    profile_name: str
+    frequency_band: int
+    frequency_label: str
+
+    # Coverage metrics
+    ap_count: int = 0
+    client_count: int = 0
+
+    # Performance metrics
+    rrm_health_score: float = 0.0
+    rrm_changes: int = 0
+
+    # Insights
+    insights: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Metadata
+    timestamp: str = ""
+    has_issues: bool = False
+
+    def calculate_issue_status(
+        self,
+        health_threshold: float = 70.0,
+        changes_threshold: int = 100
+    ) -> None:
+        """
+        Determine if building has issues based on thresholds.
+
+        Evaluates metrics against configurable thresholds to flag
+        buildings requiring attention. A building is considered to
+        have issues if any of these conditions are met:
+        - Health score below threshold
+        - Active insights present
+        - RRM changes exceed threshold
+
+        Parameters:
+            health_threshold (float): Minimum acceptable health score.
+                Default: 70.0
+            changes_threshold (int): Maximum acceptable RRM changes.
+                Default: 100
+
+        Returns:
+            None: Sets self.has_issues flag
+        """
+        self.has_issues = (
+            self.rrm_health_score < health_threshold or
+            len(self.insights) > 0 or
+            self.rrm_changes > changes_threshold
+        )
+
+
+class DataCollector:
+    """
+    Collects AI-RRM metrics for all enabled buildings.
+
+    This class coordinates the entire data collection process,
+    from discovering AI-RRM enabled buildings to gathering metrics
+    across all frequency bands.
+    """
+
+    # Frequency band mapping (band number to display label)
+    FREQUENCY_BANDS = {
+        2: "2.4 GHz",
+        5: "5 GHz",
+        6: "6 GHz"
+    }
+
+    def __init__(self, client: DNACenterClient) -> None:
+        """
+        Initialize data collector.
+
+        Parameters:
+            client (DNACenterClient): Authenticated DNA Center client
+
+        Returns:
+            None
+        """
+        self.client: DNACenterClient = client
+        self.buildings: List[Dict[str, Any]] = []
+        self.metrics: List[BuildingMetrics] = []
+
+    def collect_all_metrics(self) -> List[BuildingMetrics]:
+        """
+        Collect metrics for all AI-RRM enabled buildings.
+
+        Orchestrates the entire collection process:
+        1. Discovers buildings with AI-RRM enabled
+        2. Iterates through each building
+        3. Collects metrics for each frequency band (2.4, 5, 6 GHz)
+        4. Handles errors gracefully, continuing on failure
+
+        Returns:
+            List[BuildingMetrics]: List of collected metrics, one entry
+                per building/frequency combination
+
+        Raises:
+            None: Errors are logged but don't stop collection
+        """
+        logger.info("Starting data collection")
+
+        # Get buildings with AI-RRM enabled
+        self.buildings = self.client.get_airrm_buildings()
+
+        # Edge case: No AI-RRM buildings configured
+        if not self.buildings:
+            logger.warning("No AI-RRM enabled buildings found")
+            return []
+
+        # Collect metrics for each building and frequency band
+        for building in self.buildings:
+            building_id = building.get('instanceUUID')
+            building_name = building.get('name', 'Unknown')
+            building_hierarchy = building.get('groupNameHierarchy', '')
+            profile_name = building.get('aiRfProfileName', 'Unknown')
+
+            logger.info(
+                f"Collecting data for building: "
+                f"{building_name} ({building_hierarchy})"
+            )
+
+            # Iterate through all frequency bands
+            for freq_band, freq_label in self.FREQUENCY_BANDS.items():
+                try:
+                    metrics = self._collect_building_frequency_metrics(
+                        building_id,
+                        building_name,
+                        building_hierarchy,
+                        profile_name,
+                        freq_band,
+                        freq_label
+                    )
+                    if metrics:
+                        self.metrics.append(metrics)
+                except Exception as e:
+                    # Log but continue - don't let one failure stop all
+                    logger.error(
+                        f"Failed to collect metrics for "
+                        f"{building_name} - {freq_label}: {e}"
+                    )
+
+        logger.info(
+            f"Collection complete. Gathered metrics for "
+            f"{len(self.metrics)} building/frequency combinations"
+        )
+        return self.metrics
+
+    def _collect_building_frequency_metrics(
+        self,
+        building_id: str,
+        building_name: str,
+        building_hierarchy: str,
+        profile_name: str,
+        freq_band: int,
+        freq_label: str
+    ) -> BuildingMetrics:
+        """
+        Collect all metrics for a single building/frequency combo.
+
+        Makes three separate API calls to gather:
+        1. Coverage data (APs, clients)
+        2. Performance data (health score, RRM changes)
+        3. Insights (AI-generated recommendations)
+
+        Parameters:
+            building_id (str): Building UUID
+            building_name (str): Building display name
+            building_hierarchy (str): Full site hierarchy path
+            profile_name (str): AI-RRM profile name
+            freq_band (int): Frequency band number (2, 5, or 6)
+            freq_label (str): Display label (e.g., "2.4 GHz")
+
+        Returns:
+            BuildingMetrics: Populated metrics object
+
+        Raises:
+            None: Individual API failures are logged but don't fail
+                the method
+        """
+        logger.debug(f"  Fetching {freq_label} data...")
+
+        # Initialize metrics object with building metadata
+        metrics = BuildingMetrics(
+            building_id=building_id,
+            building_name=building_name,
+            building_hierarchy=building_hierarchy,
+            profile_name=profile_name,
+            frequency_band=freq_band,
+            frequency_label=freq_label
+        )
+
+        # Get coverage data (AP count, client count)
+        try:
+            coverage = self.client.get_coverage_summary(
+                building_id,
+                freq_band
+            )
+            if coverage:
+                metrics.ap_count = coverage.get('totalApCount', 0)
+                metrics.client_count = coverage.get('totalClients', 0)
+                metrics.timestamp = coverage.get('timestamp', '')
+        except Exception as e:
+            # Edge case: API call fails, log and continue with defaults
+            logger.warning(f"    Could not fetch coverage data: {e}")
+
+        # Get performance data (RRM health score, changes)
+        try:
+            performance = self.client.get_performance_summary(
+                building_id,
+                freq_band
+            )
+            if performance:
+                metrics.rrm_health_score = performance.get(
+                    'rrmHealthScore',
+                    0.0
+                )
+                metrics.rrm_changes = performance.get(
+                    'totalRrmChangesV2',
+                    0
+                )
+                # Use performance timestamp if coverage didn't provide one
+                if not metrics.timestamp:
+                    metrics.timestamp = performance.get('timestamp', '')
+        except Exception as e:
+            # Edge case: API call fails, log and continue with defaults
+            logger.warning(f"    Could not fetch performance data: {e}")
+
+        # Get insights
+        try:
+            insights = self.client.get_insights(building_id, freq_band)
+            metrics.insights = insights
+        except Exception as e:
+            # Edge case: API call fails, insights remain empty list
+            logger.warning(f"    Could not fetch insights: {e}")
+
+        # Calculate issue status based on collected data
+        metrics.calculate_issue_status()
+
+        return metrics
+
+    def get_summary_stats(self) -> Dict[str, Any]:
+        """
+        Calculate summary statistics across all collected metrics.
+
+        Aggregates data from all collected building/frequency metrics
+        to provide high-level statistics for executive summary.
+
+        Returns:
+            Dict[str, Any]: Summary statistics including:
+                - total_buildings: Unique building count
+                - buildings_with_issues: Count of buildings flagged
+                - total_aps: Sum of all APs
+                - total_clients: Sum of all clients
+                - total_insights: Sum of all insights
+                - average_health_score: Mean health score
+                - collection_timestamp: ISO format timestamp
+                Returns empty dict if no metrics collected
+
+        Raises:
+            None
+        """
+        # Edge case: No metrics collected
+        if not self.metrics:
+            return {}
+
+        # Calculate unique building count (handles multiple frequencies)
+        total_buildings = len(
+            set(m.building_id for m in self.metrics)
+        )
+        buildings_with_issues = len(
+            set(m.building_id for m in self.metrics if m.has_issues)
+        )
+
+        # Aggregate counts across all frequency bands
+        total_aps = sum(m.ap_count for m in self.metrics)
+        total_clients = sum(m.client_count for m in self.metrics)
+        total_insights = sum(len(m.insights) for m in self.metrics)
+
+        # Calculate average health score
+        avg_health_score = (
+            sum(m.rrm_health_score for m in self.metrics) /
+            len(self.metrics) if self.metrics else 0
+        )
+
+        return {
+            'total_buildings': total_buildings,
+            'buildings_with_issues': buildings_with_issues,
+            'total_aps': total_aps,
+            'total_clients': total_clients,
+            'total_insights': total_insights,
+            'average_health_score': round(avg_health_score, 2),
+            'collection_timestamp': datetime.now().isoformat()
+        }
