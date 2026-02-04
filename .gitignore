@@ -27,3 +27,10 @@ output/
 # OS
 .DS_Store
 Thumbs.db
+
+# Development/temporary documentation
+CODE_REVIEW.md
+PDF_ENHANCEMENT.md
+PROJECT_SUMMARY.md
+REPOSITORY.md
+TEST_REPORT.md
