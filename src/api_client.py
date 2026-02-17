@@ -90,16 +90,18 @@ class DNACenterClient:
 
     def get_airrm_buildings(self) -> List[Dict[str, Any]]:
         """
-        Get list of buildings with AI-RRM enabled.
+        Get list of buildings with AI-RRM enabled (building-level only).
 
         Queries the DNA Center API to retrieve all buildings that have
-        AI-RRM profiles configured. Each building is enriched with its
-        associated profile name.
+        AI-RRM profiles configured. The API returns floor-level sites,
+        so this method groups them by building name to return one entry
+        per building, matching AI-RRM's building-level operation model.
 
         Returns:
             List[Dict[str, Any]]: List of building dictionaries, each
                 containing building metadata (UUID, name, hierarchy)
-                and AI-RRM profile information
+                and AI-RRM profile information. Deduplicated to show
+                one entry per building.
 
         Raises:
             requests.exceptions.RequestException: If API call fails
@@ -114,19 +116,33 @@ class DNACenterClient:
         response = self._make_request('GET', endpoint)
         data = response.json()
 
-        buildings: List[Dict[str, Any]] = []
+        # Use dict to deduplicate floor-level entries by building name
+        building_map: Dict[str, Dict[str, Any]] = {}
+        floor_count = 0
         
         # Parse response and extract buildings from each profile
         if 'response' in data:
             for profile in data['response']:
                 profile_name = profile.get('aiRfProfileName', 'Unknown')
-                for building in profile.get('associatedBuildings', []):
-                    # Enrich building data with profile name
-                    building['aiRfProfileName'] = profile_name
-                    buildings.append(building)
+                for site in profile.get('associatedBuildings', []):
+                    floor_count += 1
+                    building_name = site.get('name', '')
+                    
+                    # Group by building name - keep first occurrence
+                    # AI-RRM operates at building level, not floor level
+                    if building_name and building_name not in building_map:
+                        site['aiRfProfileName'] = profile_name
+                        building_map[building_name] = site
+                        logger.debug(
+                            f"Added building: {building_name} "
+                            f"(UUID: {site.get('instanceUUID')})"
+                        )
+
+        buildings = list(building_map.values())
 
         logger.info(
-            f"Found {len(buildings)} buildings with AI-RRM enabled"
+            f"Found {len(buildings)} buildings with AI-RRM enabled "
+            f"(deduplicated from {floor_count} floor-level sites)"
         )
         return buildings
 
