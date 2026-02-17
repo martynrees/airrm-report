@@ -21,7 +21,7 @@ def create_sample_data():
     
     sample_metrics = []
     
-    # Building 1: Admin - Has issues on 5 GHz and 6 GHz
+    # Building 1: Admin - Has building-wide and band-specific issues
     admin_24 = BuildingMetrics(
         building_id="sample-001",
         building_name="Admin Building",
@@ -33,7 +33,14 @@ def create_sample_data():
         client_count=45,
         rrm_health_score=85.5,
         rrm_changes=23,
-        insights=[],
+        insights=[
+            {
+                'insightType': 'busy-hours',
+                'insightValue': 0,
+                'description': 'Consider changing the configured Busy Hours for RRM to be more effective.',
+                'reason': 'Based on analyzing the wireless client association and usage patterns, we recommend this busy hour interval.'
+            }
+        ],
         timestamp="2026-02-03T10:00:00Z"
     )
     
@@ -49,6 +56,12 @@ def create_sample_data():
         rrm_health_score=65.2,
         rrm_changes=87,
         insights=[
+            {
+                'insightType': 'busy-hours',
+                'insightValue': 0,
+                'description': 'Consider changing the configured Busy Hours for RRM to be more effective.',
+                'reason': 'Based on analyzing the wireless client association and usage patterns, we recommend this busy hour interval.'
+            },
             {
                 'insightType': 'High Co-Channel Interference',
                 'insightValue': 45.2,
@@ -77,6 +90,12 @@ def create_sample_data():
         rrm_health_score=72.8,
         rrm_changes=156,
         insights=[
+            {
+                'insightType': 'busy-hours',
+                'insightValue': 0,
+                'description': 'Consider changing the configured Busy Hours for RRM to be more effective.',
+                'reason': 'Based on analyzing the wireless client association and usage patterns, we recommend this busy hour interval.'
+            },
             {
                 'insightType': 'Excessive RRM Changes',
                 'insightValue': 156,

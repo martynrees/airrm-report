@@ -69,6 +69,14 @@ COLORS = {
 }
 
 
+# Building-wide insight types that should only be shown once per building
+# These are not specific to any frequency band
+BUILDING_WIDE_INSIGHTS = {
+    'busy-hours',  # RRM busy hours configuration applies to entire building
+    # Add other building-wide insight types as they are identified
+}
+
+
 class PDFReportGenerator:
     """
     Generates professional PDF reports for AI-RRM metrics.
@@ -511,64 +519,127 @@ class PDFReportGenerator:
             building_content.append(table)
             building_content.append(Spacer(1, 0.15*inch))
 
-            # Show insights for this building with enhanced formatting
+            # Deduplicate and categorize insights for this building
             has_insights = any(len(m.insights) > 0 for m in building_metrics)
 
             if has_insights:
-                insights_header = Paragraph(
-                    "⚠ <b>Active Insights and Recommendations:</b>",
-                    self.normal_style
-                )
-                building_content.append(insights_header)
-                building_content.append(Spacer(1, 0.1*inch))
-
-                for m in sorted(
-                    building_metrics,
-                    key=lambda x: x.frequency_band
-                ):
-                    if m.insights:
-                        # Frequency band label with background
-                        freq_data = [[Paragraph(
-                            f"<b>{m.frequency_label}</b>",
-                            self.normal_style
-                        )]]
-                        freq_table = Table(freq_data, colWidths=[self.page_width - 30])
-                        freq_table.setStyle(TableStyle([
-                            ('BACKGROUND', (0, 0), (-1, -1), COLORS['med_blue']),
-                            ('TEXTCOLOR', (0, 0), (-1, -1), COLORS['white']),
-                            ('LEFTPADDING', (0, 0), (-1, -1), 10),
-                            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-                            ('TOPPADDING', (0, 0), (-1, -1), 5),
-                            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                # Separate building-wide from band-specific insights
+                building_wide_insights = {}  # Dict to deduplicate by insight type
+                band_specific_insights = {}  # Dict by band: [insights]
+                
+                for m in building_metrics:
+                    band = m.frequency_band
+                    if band not in band_specific_insights:
+                        band_specific_insights[band] = []
+                    
+                    for insight in m.insights:
+                        insight_type = insight.get('insightType', '')
+                        
+                        if insight_type in BUILDING_WIDE_INSIGHTS:
+                            # Deduplicate building-wide insights by type
+                            if insight_type not in building_wide_insights:
+                                building_wide_insights[insight_type] = insight
+                        else:
+                            # Keep band-specific insights
+                            band_specific_insights[band].append(insight)
+                
+                # Display building-wide insights first (if any)
+                if building_wide_insights:
+                    bw_header = Paragraph(
+                        "🏢 <b>Building-Wide Insights:</b>",
+                        self.normal_style
+                    )
+                    building_content.append(bw_header)
+                    building_content.append(Spacer(1, 0.1*inch))
+                    
+                    for insight_idx, (insight_type, insight) in enumerate(
+                        sorted(building_wide_insights.items()), 1
+                    ):
+                        insight_text = (
+                            f"<b>{insight_idx}. {insight.get('insightType', 'N/A')}</b><br/>"
+                            f"<b>Description:</b> {insight.get('description', 'N/A')}<br/>"
+                            f"<b>Recommendation:</b> {insight.get('reason', 'N/A')}"
+                        )
+                        insight_para = Paragraph(insight_text, self.insight_style)
+                        
+                        insight_data = [[insight_para]]
+                        insight_table = Table(insight_data, colWidths=[self.page_width])
+                        insight_table.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, -1), COLORS['white']),
+                            ('BOX', (0, 0), (-1, -1), 1, COLORS['warning']),
+                            ('LEFTPADDING', (0, 0), (-1, -1), 15),
+                            ('RIGHTPADDING', (0, 0), (-1, -1), 15),
+                            ('TOPPADDING', (0, 0), (-1, -1), 10),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
                         ]))
-                        building_content.append(freq_table)
-                        building_content.append(Spacer(1, 0.05*inch))
-
-                        for idx, insight in enumerate(m.insights, 1):
-                            # Insight box with border
-                            insight_text = (
-                                f"<b>{idx}. {insight.get('insightType', 'N/A')}</b><br/>"
-                                f"<b>Description:</b> {insight.get('description', 'N/A')}<br/>"
-                                f"<b>Recommendation:</b> {insight.get('reason', 'N/A')}"
-                            )
-                            insight_para = Paragraph(
-                                insight_text,
-                                self.insight_style
-                            )
-                            
-                            insight_data = [[insight_para]]
-                            insight_table = Table(insight_data, colWidths=[self.page_width - 30])
-                            insight_table.setStyle(TableStyle([
-                                ('BACKGROUND', (0, 0), (-1, -1), COLORS['white']),
-                                ('BOX', (0, 0), (-1, -1), 1, COLORS['warning']),
-                                ('LEFTPADDING', (0, 0), (-1, -1), 15),
-                                ('RIGHTPADDING', (0, 0), (-1, -1), 15),
-                                ('TOPPADDING', (0, 0), (-1, -1), 10),
-                                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                        
+                        building_content.append(insight_table)
+                        building_content.append(Spacer(1, 0.08*inch))
+                    
+                    building_content.append(Spacer(1, 0.15*inch))
+                
+                # Display band-specific insights (if any)
+                has_band_specific = any(
+                    len(insights) > 0 
+                    for insights in band_specific_insights.values()
+                )
+                
+                if has_band_specific:
+                    bs_header = Paragraph(
+                        "📡 <b>Frequency-Specific Insights:</b>",
+                        self.normal_style
+                    )
+                    building_content.append(bs_header)
+                    building_content.append(Spacer(1, 0.1*inch))
+                    
+                    # Get frequency labels for enabled bands
+                    band_labels = {
+                        m.frequency_band: m.frequency_label 
+                        for m in building_metrics
+                    }
+                    
+                    for band in sorted(band_specific_insights.keys()):
+                        insights = band_specific_insights[band]
+                        if insights:
+                            # Frequency band label with background
+                            freq_label = band_labels.get(band, f"Band {band}")
+                            freq_data = [[Paragraph(
+                                f"<b>{freq_label}</b>",
+                                self.normal_style
+                            )]]
+                            freq_table = Table(freq_data, colWidths=[self.page_width - 30])
+                            freq_table.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, -1), COLORS['med_blue']),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), COLORS['white']),
+                                ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                                ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
                             ]))
+                            building_content.append(freq_table)
+                            building_content.append(Spacer(1, 0.05*inch))
                             
-                            building_content.append(insight_table)
-                            building_content.append(Spacer(1, 0.08*inch))
+                            for insight_idx, insight in enumerate(insights, 1):
+                                insight_text = (
+                                    f"<b>{insight_idx}. {insight.get('insightType', 'N/A')}</b><br/>"
+                                    f"<b>Description:</b> {insight.get('description', 'N/A')}<br/>"
+                                    f"<b>Recommendation:</b> {insight.get('reason', 'N/A')}"
+                                )
+                                insight_para = Paragraph(insight_text, self.insight_style)
+                                
+                                insight_data = [[insight_para]]
+                                insight_table = Table(insight_data, colWidths=[self.page_width - 30])
+                                insight_table.setStyle(TableStyle([
+                                    ('BACKGROUND', (0, 0), (-1, -1), COLORS['white']),
+                                    ('BOX', (0, 0), (-1, -1), 1, COLORS['warning']),
+                                    ('LEFTPADDING', (0, 0), (-1, -1), 15),
+                                    ('RIGHTPADDING', (0, 0), (-1, -1), 15),
+                                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                                ]))
+                                
+                                building_content.append(insight_table)
+                                building_content.append(Spacer(1, 0.08*inch))
 
                 building_content.append(Spacer(1, 0.1*inch))
             else:
