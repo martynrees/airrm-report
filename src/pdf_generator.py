@@ -208,9 +208,6 @@ class PDFReportGenerator:
         # Executive Summary with KPIs and charts
         self._add_executive_summary(summary_stats, metrics)
 
-        # Health Score Overview with visualization
-        self._add_health_overview(metrics)
-
         # Buildings with Issues (with inline insights)
         buildings_with_issues = [m for m in metrics if m.has_issues]
         if buildings_with_issues:
@@ -371,53 +368,6 @@ class PDFReportGenerator:
             return COLORS['warning']
         else:
             return COLORS['danger']
-
-    def _add_health_overview(self, metrics: List[BuildingMetrics]) -> None:
-        """Add health score distribution overview."""
-        heading = Paragraph("Health Score Distribution", self.heading_style)
-        
-        # Categorize health scores
-        excellent = sum(1 for m in metrics if m.rrm_health_score >= 90)
-        good = sum(1 for m in metrics if 80 <= m.rrm_health_score < 90)
-        fair = sum(1 for m in metrics if 60 <= m.rrm_health_score < 80)
-        poor = sum(1 for m in metrics if m.rrm_health_score < 60)
-        
-        data = [
-            ['Health Category', 'Count', 'Percentage', 'Status'],
-            ['Excellent (90+)', str(excellent), f"{(excellent/len(metrics)*100):.1f}%", '✓'],
-            ['Good (80-89)', str(good), f"{(good/len(metrics)*100):.1f}%", '✓'],
-            ['Fair (60-79)', str(fair), f"{(fair/len(metrics)*100):.1f}%", '⚠'],
-            ['Poor (<60)', str(poor), f"{(poor/len(metrics)*100):.1f}%", '✗'],
-        ]
-        
-        table = Table(data, colWidths=[2.5*inch, 1*inch, 1.5*inch, 1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), COLORS['cisco_blue']),
-            ('TEXTCOLOR', (0, 0), (-1, 0), COLORS['white']),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('TOPPADDING', (0, 1), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-            ('BACKGROUND', (0, 1), (0, 1), COLORS['gray_light']),
-            ('BACKGROUND', (0, 2), (0, 2), COLORS['gray_light']),
-            ('BACKGROUND', (0, 3), (0, 3), COLORS['gray_light']),
-            ('BACKGROUND', (0, 4), (0, 4), COLORS['gray_light']),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['border']),
-            ('LINEBELOW', (0, 0), (-1, 0), 2, COLORS['cisco_blue']),
-        ]))
-        
-        # Keep heading and full table together
-        content = KeepTogether([
-            heading,
-            Spacer(1, 0.1*inch),
-            table,
-            Spacer(1, 0.4*inch)
-        ])
-        
-        self.story.append(content)
 
     def _add_no_issues_section(self) -> None:
         """Add section when no issues are found."""
