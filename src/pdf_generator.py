@@ -71,6 +71,23 @@ COLORS = {
 
 # Building-wide insight types that should only be shown once per building
 # These are not specific to any frequency band
+#
+# INSIGHT DEDUPLICATION STRATEGY:
+# -------------------------------
+# AI-RRM insights fall into two categories:
+#
+# 1. BUILDING-WIDE INSIGHTS (show once per building):
+#    - Apply to entire building configuration, not individual frequency bands
+#    - Examples: 'busy-hours' (RRM timing configuration is building-level)
+#    - These are deduplicated by insight type to avoid repetition
+#
+# 2. BAND-SPECIFIC INSIGHTS (show per frequency):
+#    - Specific to individual frequency bands (2.4, 5, 6 GHz)
+#    - Examples: channel interference, DFS issues, utilization warnings
+#    - These are grouped under their respective frequency band sections
+#
+# Implementation: See _add_issues_section() method which separates and
+# renders these insight types appropriately in the PDF report.
 BUILDING_WIDE_INSIGHTS = {
     'busy-hours',  # RRM busy hours configuration applies to entire building
     # Add other building-wide insight types as they are identified
@@ -573,7 +590,26 @@ class PDFReportGenerator:
             building_content.append(table)
             building_content.append(Spacer(1, 0.15*inch))
 
-            # Deduplicate and categorize insights for this building
+            # ═══════════════════════════════════════════════════════════
+            # INSIGHT DEDUPLICATION AND CATEGORIZATION
+            # ═══════════════════════════════════════════════════════════
+            # This section implements the core deduplication logic for insights.
+            # 
+            # PROBLEM: API returns same building-wide insight (e.g., busy-hours)
+            # for each frequency band, resulting in duplicate entries.
+            #
+            # SOLUTION: Separate insights into two categories:
+            # 1. Building-wide: Show once per building (deduplicated by type)
+            # 2. Band-specific: Show once per frequency band
+            #
+            # ALGORITHM:
+            # - Iterate through all frequency band metrics for this building
+            # - Check each insight's type against BUILDING_WIDE_INSIGHTS set
+            # - If building-wide: Store in dict keyed by type (auto-deduplicates)
+            # - If band-specific: Store in dict keyed by band (preserves all)
+            # - Render building-wide section first, then band-specific sections
+            # ═══════════════════════════════════════════════════════════
+            
             has_insights = any(len(m.insights) > 0 for m in building_metrics)
 
             if has_insights:
@@ -591,10 +627,11 @@ class PDFReportGenerator:
                         
                         if insight_type in BUILDING_WIDE_INSIGHTS:
                             # Deduplicate building-wide insights by type
+                            # Only keep first occurrence (all are identical)
                             if insight_type not in building_wide_insights:
                                 building_wide_insights[insight_type] = insight
                         else:
-                            # Keep band-specific insights
+                            # Keep all band-specific insights (not duplicates)
                             band_specific_insights[band].append(insight)
                 
                 # Display building-wide insights first (if any)
