@@ -145,16 +145,32 @@ class DataCollector:
             None: Errors are logged but don't stop collection
         """
         logger.info("Starting data collection")
+        
+        # Perform health check before collection
+        logger.info("Validating connectivity to Catalyst Center...")
+        if not self.client.health_check():
+            logger.error("Health check failed - aborting data collection")
+            logger.error("Please verify network connectivity and credentials")
+            return []
 
         # Get buildings with AI-RRM enabled
-        self.buildings = self.client.get_airrm_buildings()
+        try:
+            self.buildings = self.client.get_airrm_buildings()
+        except Exception as e:
+            logger.error(f"Failed to retrieve AI-RRM buildings: {e}")
+            logger.error("Cannot continue without building list")
+            return []
 
         # Edge case: No AI-RRM buildings configured
         if not self.buildings:
             logger.warning("No AI-RRM enabled buildings found")
+            logger.warning("Check that AI-RRM profiles are assigned to buildings")
             return []
 
         # Collect metrics for each building and frequency band
+        successful_collections = 0
+        failed_collections = 0
+        
         for building in self.buildings:
             building_id = building.get('instanceUUID')
             building_name = building.get('name', 'Unknown')
@@ -187,17 +203,30 @@ class DataCollector:
                     )
                     if metrics:
                         self.metrics.append(metrics)
+                        successful_collections += 1
                 except Exception as e:
                     # Log but continue - don't let one failure stop all
+                    failed_collections += 1
                     logger.error(
                         f"Failed to collect metrics for "
                         f"{building_name} - {freq_label}: {e}"
                     )
+                    logger.debug(f"Error details:", exc_info=True)
 
         logger.info(
             f"Collection complete. Gathered metrics for "
             f"{len(self.metrics)} building/frequency combinations"
         )
+        logger.info(
+            f"Success: {successful_collections}, Failed: {failed_collections}"
+        )
+        
+        if failed_collections > 0:
+            logger.warning(
+                f"{failed_collections} collection(s) failed - "
+                f"report will contain partial data"
+            )
+        
         return self.metrics
 
     def _collect_building_frequency_metrics(

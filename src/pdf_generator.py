@@ -107,6 +107,9 @@ class PDFReportGenerator:
         self.styles = getSampleStyleSheet()
         self.story: List[Any] = []
         self.page_width = letter[0] - 1.5*inch  # usable width
+        
+        # For PDF bookmarks
+        self.bookmarks: List[tuple] = []  # (title, level, key)
 
         # Enhanced custom styles
         self.title_style = ParagraphStyle(
@@ -192,6 +195,62 @@ class PDFReportGenerator:
             textColor=COLORS['border'],
             alignment=TA_CENTER
         )
+
+    @staticmethod
+    def get_health_score_color(score: float) -> tuple:
+        """
+        Get color and status for health score.
+        
+        Parameters:
+            score (float): Health score (0-100)
+            
+        Returns:
+            tuple: (background_color, text_color, status_icon, status_text)
+        """
+        if score >= 90:
+            return (
+                COLORS['success_light'],
+                COLORS['success'],
+                '✓',
+                'Excellent'
+            )
+        elif score >= 80:
+            return (
+                COLORS['success_light'],
+                COLORS['text_dark'],
+                '✓',
+                'Good'
+            )
+        elif score >= 60:
+            return (
+                COLORS['warning_light'],
+                COLORS['text_dark'],
+                '⚠',
+                'Fair'
+            )
+        else:
+            return (
+                COLORS['danger_light'],
+                COLORS['danger'],
+                '✗',
+                'Poor'
+            )
+    
+    def _add_bookmark(self, title: str, level: int = 0) -> Paragraph:
+        """
+        Create a paragraph with bookmark for PDF navigation.
+        
+        Parameters:
+            title (str): Bookmark/heading title
+            level (int): Heading level (0=main, 1=sub)
+            
+        Returns:
+            Paragraph: Styled paragraph with bookmark
+        """
+        style = self.heading_style if level == 0 else self.subheading_style
+        # Create paragraph with bookmark
+        para = Paragraph(f'<a name="{title}"/>{title}', style)
+        return para
 
     def generate_report(
         self,
@@ -308,7 +367,7 @@ class PDFReportGenerator:
 
     def _add_executive_summary(self, stats: Dict[str, Any], metrics: List[BuildingMetrics]) -> None:
         """Add executive summary section with KPI boxes and key metrics."""
-        self.story.append(Paragraph("Executive Summary", self.heading_style))
+        self.story.append(self._add_bookmark("Executive Summary", level=0))
         self.story.append(Spacer(1, 0.15*inch))
         
         # Key Performance Indicators in colored boxes
@@ -424,9 +483,9 @@ class PDFReportGenerator:
         Returns:
             None
         """
-        section_heading = Paragraph(
+        section_heading = self._add_bookmark(
             "Buildings Requiring Attention",
-            self.heading_style
+            level=0
         )
 
         # Group by building
@@ -445,9 +504,9 @@ class PDFReportGenerator:
                 building_content.append(section_heading)
                 building_content.append(Spacer(1, 0.15*inch))
             
-            # Building header with number badge
+            # Building header with number badge and bookmark
             building_header = Paragraph(
-                f"<b>{idx}. {building_name}</b>",
+                f'<a name="building_{idx}"/><b>{idx}. {building_name}</b>',
                 self.subheading_style
             )
             building_content.append(building_header)
@@ -474,12 +533,11 @@ class PDFReportGenerator:
                 building_metrics,
                 key=lambda x: x.frequency_band
             ):
-                # Color code health scores
-                health_color = self._get_health_color(m.rrm_health_score)
+                bg_color, text_color, icon, status = self.get_health_score_color(m.rrm_health_score)
                 
                 data.append([
                     m.frequency_label,
-                    f"{m.rrm_health_score:.1f}",
+                    f"{icon} {m.rrm_health_score:.1f}",
                     str(m.rrm_changes),
                     str(m.ap_count),
                     str(m.client_count)
@@ -492,7 +550,7 @@ class PDFReportGenerator:
             
             # Build row-specific backgrounds based on health scores
             row_styles = [
-                ('BACKGROUND', (0, 0), (-1, 0), COLORS['danger']),
+                ('BACKGROUND', (0, 0), (-1, 0), COLORS['med_blue']),
                 ('TEXTCOLOR', (0, 0), (-1, 0), COLORS['white']),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -502,18 +560,14 @@ class PDFReportGenerator:
                 ('TOPPADDING', (0, 1), (-1, -1), 8),
                 ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
                 ('GRID', (0, 0), (-1, -1), 1, COLORS['border']),
-                ('LINEBELOW', (0, 0), (-1, 0), 2, COLORS['danger']),
+                ('LINEBELOW', (0, 0), (-1, 0), 2, COLORS['med_blue']),
             ]
             
-            # Color code rows based on health
+            # Color code rows based on health scores
             for row_idx, m in enumerate(sorted(building_metrics, key=lambda x: x.frequency_band), 1):
-                if m.rrm_health_score >= 80:
-                    bg_color = COLORS['success_light']  # Light green for healthy
-                elif m.rrm_health_score >= 60:
-                    bg_color = COLORS['warning_light']  # Light orange for warning
-                else:
-                    bg_color = COLORS['danger_light']  # Light red for poor
-                row_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), bg_color))
+                bg_color, text_color, icon, status = self.get_health_score_color(m.rrm_health_score)
+                row_styles.append(('BACKGROUND', (1, row_idx), (1, row_idx), bg_color))
+                row_styles.append(('TEXTCOLOR', (1, row_idx), (1, row_idx), text_color))
             
             table.setStyle(TableStyle(row_styles))
             building_content.append(table)
@@ -699,9 +753,9 @@ class PDFReportGenerator:
         """
         self.story.append(PageBreak())
         
-        heading = Paragraph(
+        heading = self._add_bookmark(
             "Complete Building Inventory",
-            self.heading_style
+            level=0
         )
 
         # Create table data
@@ -722,11 +776,14 @@ class PDFReportGenerator:
             # Format insights count with indicator
             insight_count = len(m.insights)
             insights_display = str(insight_count) if insight_count == 0 else f"⚠ {insight_count}"
+            
+            # Get health score color and icon
+            bg_color, text_color, icon, status = self.get_health_score_color(m.rrm_health_score)
 
             data.append([
                 m.building_name,
                 m.frequency_label,
-                f"{m.rrm_health_score:.1f}",
+                f"{icon} {m.rrm_health_score:.1f}",
                 str(m.rrm_changes),
                 str(m.ap_count),
                 str(m.client_count),
@@ -747,7 +804,7 @@ class PDFReportGenerator:
             repeatRows=1  # Repeat header on each page
         )
         
-        # Build style with alternating row colors
+        # Build style with health score color coding
         table_style = [
             ('BACKGROUND', (0, 0), (-1, 0), COLORS['cisco_blue']),
             ('TEXTCOLOR', (0, 0), (-1, 0), COLORS['white']),
@@ -763,17 +820,26 @@ class PDFReportGenerator:
             ('LINEBELOW', (0, 0), (-1, 0), 2, COLORS['cisco_blue']),
         ]
         
-        # Alternating row colors
-        for i in range(1, len(data)):
-            bg_color = COLORS['white'] if i % 2 == 0 else COLORS['gray_light']
-            table_style.append(('BACKGROUND', (0, i), (-1, i), bg_color))
+        # Add alternating row colors and health score color coding
+        for i, m in enumerate(sorted(metrics, key=lambda x: (x.building_name, x.frequency_band)), 1):
+            # Alternating background
+            bg_color_alt = COLORS['white'] if i % 2 == 0 else COLORS['gray_lighter']
+            table_style.append(('BACKGROUND', (0, i), (-1, i), bg_color_alt))
+            
+            # Color code health score cell
+            bg_color, text_color, icon, status = self.get_health_score_color(m.rrm_health_score)
+            table_style.append(('BACKGROUND', (2, i), (2, i), bg_color))
+            table_style.append(('TEXTCOLOR', (2, i), (2, i), text_color))
         
         table.setStyle(TableStyle(table_style))
 
-        # Add legend
+        # Add legend with color indicators
         legend_text = (
-            "<b>Legend:</b> ⚠ indicates active insights present | "
-            "Health Score ranges: Excellent (90+), Good (80-89), Fair (60-79), Poor (<60)"
+            "<b>Legend:</b> "
+            "✓ = Excellent/Good (80+) | "
+            "⚠ = Fair (60-79) | "
+            "✗ = Poor (<60) | "
+            "⚠ in Insights column = Active insights present"
         )
         legend = Paragraph(legend_text, self.normal_style)
         

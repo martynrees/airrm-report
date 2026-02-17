@@ -6,9 +6,12 @@ Center APIs, specifically for AI-RRM (AI Radio Resource Management)
 data collection using both REST and GraphQL endpoints.
 """
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 from auth import DNACenterAuth
 
@@ -24,12 +27,13 @@ class DNACenterClient:
     AI-generated insights via GraphQL queries.
     """
 
-    def __init__(self, auth: DNACenterAuth) -> None:
+    def __init__(self, auth: DNACenterAuth, max_retries: int = 3) -> None:
         """
-        Initialize DNA Center API client.
+        Initialize DNA Center API client with retry logic.
 
         Parameters:
             auth (DNACenterAuth): Authenticated DNA Center session
+            max_retries (int): Maximum number of retry attempts for failed requests
 
         Returns:
             None
@@ -37,6 +41,21 @@ class DNACenterClient:
         self.auth: DNACenterAuth = auth
         self.base_url: str = auth.base_url
         self.verify_ssl: bool = auth.verify_ssl
+        self.max_retries: int = max_retries
+        
+        # Configure session with retry strategy
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=max_retries,
+            backoff_factor=1,  # Wait 1, 2, 4 seconds between retries
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
+            allowed_methods=["GET", "POST"]  # Only retry safe methods
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        
+        logger.debug(f"API client initialized with {max_retries} max retries")
 
     def _make_request(
         self,
@@ -45,10 +64,10 @@ class DNACenterClient:
         **kwargs: Any
     ) -> requests.Response:
         """
-        Make authenticated request to DNA Center API.
+        Make authenticated request to DNA Center API with retry logic.
 
         This is a private helper method that handles authentication
-        headers, SSL verification, and error handling for all API calls.
+        headers, SSL verification, retries, and error handling for all API calls.
 
         Parameters:
             method (str): HTTP method (GET, POST, PUT, DELETE)
@@ -70,7 +89,7 @@ class DNACenterClient:
             headers.update(kwargs.pop('headers'))
 
         try:
-            response = requests.request(
+            response = self.session.request(
                 method=method,
                 url=url,
                 headers=headers,
@@ -80,13 +99,72 @@ class DNACenterClient:
             )
             # Raise exception for 4xx/5xx status codes
             response.raise_for_status()
+            logger.debug(f"API request successful: {method} {endpoint}")
             return response
+            
+        except requests.exceptions.Timeout as e:
+            logger.error(f"API request timeout: {method} {endpoint} - {e}")
+            raise
+            
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"API connection error: {method} {endpoint} - {e}")
+            logger.error(f"Check that Catalyst Center is reachable at {self.base_url}")
+            raise
+            
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"API HTTP error: {method} {endpoint} - Status {e.response.status_code}")
+            if e.response.status_code == 401:
+                logger.error("Authentication failed - check credentials")
+            elif e.response.status_code == 403:
+                logger.error("Access forbidden - check user permissions")
+            elif e.response.status_code == 404:
+                logger.error(f"Endpoint not found: {endpoint}")
+            raise
+            
         except requests.exceptions.RequestException as e:
             # Log error with full context for troubleshooting
             logger.error(
                 f"API request failed: {method} {endpoint} - {e}"
             )
             raise
+    
+    def health_check(self) -> bool:
+        """
+        Perform health check to verify connectivity to Catalyst Center.
+        
+        Returns:
+            bool: True if connection is healthy, False otherwise
+        """
+        try:
+            logger.info(f"Performing health check: {self.base_url}")
+            
+            # Try a simple API endpoint to verify connectivity
+            response = self._make_request('GET', '/api/v1/dna/sunray/airfprofilesitesinfo')
+            
+            logger.info("✓ Health check passed - Catalyst Center is reachable")
+            return True
+            
+        except requests.exceptions.ConnectionError:
+            logger.error(f"✗ Health check failed - Cannot reach {self.base_url}")
+            logger.error("  Check network connectivity and Catalyst Center URL")
+            return False
+            
+        except requests.exceptions.Timeout:
+            logger.error(f"✗ Health check failed - Request timeout to {self.base_url}")
+            logger.error("  Catalyst Center may be overloaded or network is slow")
+            return False
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                logger.error("✗ Health check failed - Authentication error")
+                logger.error("  Check username and password in .env file")
+            else:
+                logger.error(f"✗ Health check failed - HTTP {e.response.status_code}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"✗ Health check failed - Unexpected error: {e}")
+            return False
 
     def get_airrm_buildings(self) -> List[Dict[str, Any]]:
         """
