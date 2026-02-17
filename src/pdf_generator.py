@@ -315,7 +315,7 @@ class PDFReportGenerator:
             ),
             Spacer(0.2*inch, 0),
             self._create_stat_box(
-                "Buildings with Issues",
+                "Buildings with Insights",
                 str(stats.get('buildings_with_issues', 0)),
                 COLORS['danger'] if stats.get('buildings_with_issues', 0) > 0 else COLORS['success']
             ),

@@ -123,10 +123,12 @@ def load_config() -> Dict[str, Any]:
     Optional environment variables:
         - VERIFY_SSL: Whether to verify SSL certificates
             (default: false)
+        - FREQUENCY_BANDS: Comma-separated list of bands to collect
+            (e.g., "2.4,5,6" or "5,6"). Default: all bands
 
     Returns:
         Dict[str, Any]: Configuration dictionary with keys:
-            url, username, password, verify_ssl
+            url, username, password, verify_ssl, enabled_bands
 
     Raises:
         SystemExit: If required environment variables are missing
@@ -141,8 +143,34 @@ def load_config() -> Dict[str, Any]:
         'verify_ssl': os.getenv('VERIFY_SSL', 'false').lower() == 'true'
     }
     
+    # Parse frequency bands configuration
+    bands_str = os.getenv('FREQUENCY_BANDS', '2.4,5,6')
+    enabled_bands = []
+    try:
+        for band in bands_str.split(','):
+            band = band.strip()
+            if band == '2.4':
+                enabled_bands.append(2)
+            elif band in ['5', '5.0']:
+                enabled_bands.append(5)
+            elif band in ['6', '6.0']:
+                enabled_bands.append(6)
+            else:
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Invalid frequency band '{band}' ignored")
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Error parsing FREQUENCY_BANDS: {e}. Using all bands.")
+        enabled_bands = [2, 5, 6]
+    
+    if not enabled_bands:
+        enabled_bands = [2, 5, 6]
+    
+    config['enabled_bands'] = enabled_bands
+    
     # Validate required configuration
-    missing = [k for k, v in config.items() if v is None and k != 'verify_ssl']
+    missing = [k for k, v in config.items() 
+               if v is None and k not in ['verify_ssl', 'enabled_bands']]
     if missing:
         print(f"Error: Missing required environment variables: {', '.join(missing)}")
         print("\nPlease set the following environment variables:")
@@ -205,7 +233,11 @@ def main() -> None:
 
         # Step 3: Collect data from all buildings
         logger.info("Collecting AI-RRM metrics...")
-        collector = DataCollector(client)
+        logger.info(
+            f"Enabled frequency bands: "
+            f"{', '.join([str(b) for b in config['enabled_bands']])}"
+        )
+        collector = DataCollector(client, enabled_bands=config['enabled_bands'])
         metrics = collector.collect_all_metrics()
 
         # Edge case: No metrics were collected

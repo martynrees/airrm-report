@@ -57,10 +57,34 @@ DNA_CENTER_URL=https://your-dnac-server.com
 DNA_CENTER_USERNAME=admin
 DNA_CENTER_PASSWORD=your_password
 
+# Report Configuration
+FREQUENCY_BANDS=2.4,5,6  # Comma-separated bands to include in report
+                         # Options: 2.4, 5, 6
+                         # Examples:
+                         #   2.4,5,6  - All bands (default)
+                         #   5,6      - 5 GHz and 6 GHz only
+                         #   5        - 5 GHz only
+
 # Optional
 VERIFY_SSL=false  # Set to true if using valid SSL certificates
 LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
 ```
+
+### Frequency Band Configuration
+
+The `FREQUENCY_BANDS` setting allows you to control which frequency bands are included in the report:
+
+- **All bands (default):** `FREQUENCY_BANDS=2.4,5,6`
+- **5 GHz and 6 GHz only:** `FREQUENCY_BANDS=5,6` (useful when 2.4 GHz is not deployed)
+- **5 GHz only:** `FREQUENCY_BANDS=5` (common in modern deployments)
+- **6 GHz only:** `FREQUENCY_BANDS=6` (for Wi-Fi 6E exclusive environments)
+
+This is particularly useful when:
+- Your deployment doesn't use certain bands
+- Your regulatory domain doesn't permit 6 GHz
+- You want focused reports on specific bands
+- You need to reduce report size and processing time
+
 
 ## Usage
 

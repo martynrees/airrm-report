@@ -94,12 +94,14 @@ class DataCollector:
         6: "6 GHz"
     }
 
-    def __init__(self, client: DNACenterClient) -> None:
+    def __init__(self, client: DNACenterClient, enabled_bands: List[int] = None) -> None:
         """
         Initialize data collector.
 
         Parameters:
             client (DNACenterClient): Authenticated DNA Center client
+            enabled_bands (List[int]): List of frequency bands to collect (2, 5, 6).
+                If None, collects all bands. Default: None
 
         Returns:
             None
@@ -107,6 +109,23 @@ class DataCollector:
         self.client: DNACenterClient = client
         self.buildings: List[Dict[str, Any]] = []
         self.metrics: List[BuildingMetrics] = []
+        
+        # Configure which bands to collect
+        if enabled_bands is None:
+            self.enabled_bands = list(self.FREQUENCY_BANDS.keys())
+        else:
+            # Validate bands
+            self.enabled_bands = [b for b in enabled_bands if b in self.FREQUENCY_BANDS]
+            if not self.enabled_bands:
+                logger.warning(
+                    f"No valid frequency bands specified. Using all bands."
+                )
+                self.enabled_bands = list(self.FREQUENCY_BANDS.keys())
+        
+        logger.info(
+            f"Data collector initialized for bands: "
+            f"{', '.join([self.FREQUENCY_BANDS[b] for b in self.enabled_bands])}"
+        )
 
     def collect_all_metrics(self) -> List[BuildingMetrics]:
         """
@@ -147,8 +166,16 @@ class DataCollector:
                 f"{building_name} ({building_hierarchy})"
             )
 
-            # Iterate through all frequency bands
+            # Iterate through enabled frequency bands only
             for freq_band, freq_label in self.FREQUENCY_BANDS.items():
+                # Skip bands not enabled in configuration
+                if freq_band not in self.enabled_bands:
+                    logger.debug(
+                        f"Skipping {freq_label} for {building_name} "
+                        f"(band not enabled in configuration)"
+                    )
+                    continue
+                    
                 try:
                     metrics = self._collect_building_frequency_metrics(
                         building_id,
