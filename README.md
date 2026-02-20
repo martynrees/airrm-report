@@ -68,6 +68,9 @@ FREQUENCY_BANDS=2.4,5,6  # Comma-separated bands to include in report
 # Optional
 VERIFY_SSL=false  # Set to true if using valid SSL certificates
 LOG_LEVEL=INFO    # DEBUG, INFO, WARNING, ERROR
+
+# Cisco Branding (Optional)
+LOGO_PATH=/path/to/cisco_logo.png  # Path to Cisco logo for PDF branding
 ```
 
 ### Frequency Band Configuration
@@ -84,6 +87,59 @@ This is particularly useful when:
 - Your regulatory domain doesn't permit 6 GHz
 - You want focused reports on specific bands
 - You need to reduce report size and processing time
+
+
+## Cisco Branding
+
+The AI-RRM Report Generator includes full Cisco branding support to create professional, branded PDF reports.
+
+### Branding Features
+
+- ✓ **Cisco Color Palette** - Official Cisco brand colors throughout
+- ✓ **Cisco Logo** - Optional logo on title page
+- ✓ **Branded Headers/Footers** - Cisco-branded page elements
+- ✓ **Professional Typography** - Helvetica font family per Cisco guidelines
+- ✓ **Consistent Visual Design** - Tables, charts, and elements follow Cisco design standards
+
+### Adding Cisco Logo
+
+The report can display the official Cisco logo on the title page. You can provide the logo in three ways:
+
+**Option 1: Command Line**
+```bash
+python airrm_report.py --logo /path/to/cisco_logo.png
+```
+
+**Option 2: Environment Variable**
+```bash
+export LOGO_PATH=/path/to/cisco_logo.png
+python airrm_report.py
+```
+
+**Option 3: .env File**
+```env
+LOGO_PATH=/path/to/cisco_logo.png
+```
+
+### Logo Requirements
+
+- **Format**: PNG or JPG (PNG recommended for transparency)
+- **Resolution**: Minimum 300 DPI for professional quality
+- **Size**: Logo will be scaled to approximately 2.5 inches width
+- **Aspect Ratio**: Original aspect ratio is preserved
+
+### Obtaining Cisco Logo
+
+To maintain brand integrity, use official Cisco logos:
+- **Cisco Employees**: Download from Cisco Brand Center (internal)
+- **Cisco Partners**: Request from your Cisco partner representative
+- **Public Use**: Use official logos from Cisco's public brand guidelines
+
+**Note**: If no logo is provided, the report displays "Cisco" text branding in Cisco Blue.
+
+### Full Branding Documentation
+
+For complete details about Cisco branding implementation, color palette, typography, and design guidelines, see [BRANDING.md](BRANDING.md).
 
 
 ## Usage
@@ -106,6 +162,9 @@ Options:
   -o, --output PATH       Output PDF file path
                           (default: output/airrm_report_YYYYMMDD_HHMMSS.pdf)
   
+  --logo PATH             Path to Cisco logo image file (PNG/JPG recommended)
+                          Overrides LOGO_PATH environment variable
+  
   --log-level LEVEL       Set logging level: DEBUG, INFO, WARNING, ERROR
                           (default: INFO)
   
@@ -117,9 +176,19 @@ Options:
 
 ### Examples
 
+Generate report with Cisco logo:
+```bash
+python airrm_report.py --logo assets/cisco_logo.png
+```
+
 Generate report with custom output path:
 ```bash
 python airrm_report.py -o reports/monthly_report.pdf
+```
+
+Generate report with logo and custom path:
+```bash
+python airrm_report.py --logo assets/cisco_logo.png -o reports/branded_report.pdf
 ```
 
 Enable debug logging:
@@ -210,6 +279,7 @@ airrm-report/
 ├── output/               # Generated reports
 ├── requirements.txt      # Python dependencies
 ├── .env.example          # Environment variable template
+├── BRANDING.md          # Cisco branding documentation
 └── README.md            # This file
 ```
 

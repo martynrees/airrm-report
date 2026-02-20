@@ -104,6 +104,15 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='Disable SSL certificate verification'
     )
+    
+    parser.add_argument(
+        '--logo',
+        default=None,
+        help=(
+            'Path to Cisco logo image file (PNG/JPG recommended). '
+            'If not specified, uses LOGO_PATH environment variable or generates report without logo.'
+        )
+    )
 
     return parser.parse_args()
 
@@ -125,10 +134,12 @@ def load_config() -> Dict[str, Any]:
             (default: false)
         - FREQUENCY_BANDS: Comma-separated list of bands to collect
             (e.g., "2.4,5,6" or "5,6"). Default: all bands
+        - LOGO_PATH: Path to Cisco logo image file for PDF branding
+            (PNG/JPG recommended)
 
     Returns:
         Dict[str, Any]: Configuration dictionary with keys:
-            url, username, password, verify_ssl, enabled_bands
+            url, username, password, verify_ssl, enabled_bands, logo_path
 
     Raises:
         SystemExit: If required environment variables are missing
@@ -140,7 +151,8 @@ def load_config() -> Dict[str, Any]:
         'url': os.getenv('DNA_CENTER_URL'),
         'username': os.getenv('DNA_CENTER_USERNAME'),
         'password': os.getenv('DNA_CENTER_PASSWORD'),
-        'verify_ssl': os.getenv('VERIFY_SSL', 'false').lower() == 'true'
+        'verify_ssl': os.getenv('VERIFY_SSL', 'false').lower() == 'true',
+        'logo_path': os.getenv('LOGO_PATH')
     }
     
     # Parse frequency bands configuration
@@ -170,7 +182,7 @@ def load_config() -> Dict[str, Any]:
     
     # Validate required configuration
     missing = [k for k, v in config.items() 
-               if v is None and k not in ['verify_ssl', 'enabled_bands']]
+               if v is None and k not in ['verify_ssl', 'enabled_bands', 'logo_path']]
     if missing:
         print(f"Error: Missing required environment variables: {', '.join(missing)}")
         print("\nPlease set the following environment variables:")
@@ -260,9 +272,17 @@ def main() -> None:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Step 6: Generate PDF report
+        # Step 6: Generate PDF report with Cisco branding
         logger.info("Generating PDF report...")
-        generator = PDFReportGenerator(str(output_path))
+        
+        # Determine logo path (CLI arg takes precedence over env var)
+        logo_path = args.logo or config.get('logo_path')
+        if logo_path:
+            logger.info(f"Using Cisco logo: {logo_path}")
+        else:
+            logger.info("Generating report without logo (none specified)")
+        
+        generator = PDFReportGenerator(str(output_path), logo_path=logo_path)
         generator.generate_report(metrics, summary_stats)
 
         # Success! Report the results

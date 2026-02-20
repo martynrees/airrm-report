@@ -4,9 +4,13 @@ Test script to generate sample PDF report with mock insights data.
 
 This demonstrates the enhanced inline insights formatting by creating
 sample buildings with various health scores and insights.
+
+Usage:
+    python generate_sample_report.py [--logo /path/to/logo.png]
 """
 import sys
 import os
+import argparse
 from datetime import datetime
 
 # Add src directory to path
@@ -274,8 +278,19 @@ def main():
     output_path = "output/sample_report.pdf"
     os.makedirs("output", exist_ok=True)
     
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate sample AI-RRM report with Cisco branding')
+    parser.add_argument('--logo', help='Path to Cisco logo image file (PNG/JPG recommended)')
+    args = parser.parse_args()
+    
     print(f"Generating PDF: {output_path}")
-    generator = PDFReportGenerator(output_path)
+    if args.logo:
+        print(f"Using Cisco logo: {args.logo}")
+        generator = PDFReportGenerator(output_path, logo_path=args.logo)
+    else:
+        print("Generating without logo (use --logo to add Cisco branding)")
+        generator = PDFReportGenerator(output_path)
+    
     generator.generate_report(metrics, summary_stats)
     
     print(f"✓ Report generated successfully!")

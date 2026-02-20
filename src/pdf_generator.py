@@ -3,10 +3,12 @@ PDF Report generation module.
 
 This module generates professional PDF reports for AI-RRM metrics with
 enhanced formatting for insights and detailed building information.
+Includes full Cisco branding with logo, colors, and typography.
 """
 import logging
+import os
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
@@ -27,6 +29,7 @@ from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics import renderPDF
+from reportlab.pdfgen import canvas
 
 from data_collector import BuildingMetrics
 
@@ -102,22 +105,31 @@ class PDFReportGenerator:
     details, and comprehensive insights with improved formatting.
     """
 
-    def __init__(self, output_path: str) -> None:
+    def __init__(self, output_path: str, logo_path: Optional[str] = None) -> None:
         """
-        Initialize PDF report generator.
+        Initialize PDF report generator with Cisco branding.
 
         Parameters:
             output_path (str): Path where PDF will be saved
+            logo_path (Optional[str]): Path to Cisco logo image file (PNG/JPG recommended)
+                                      If None, report is generated without logo
 
         Returns:
             None
         """
         self.output_path: str = output_path
+        self.logo_path: Optional[str] = logo_path
+        
+        # Validate logo path if provided
+        if self.logo_path and not os.path.exists(self.logo_path):
+            logger.warning(f"Logo file not found: {self.logo_path}. Generating report without logo.")
+            self.logo_path = None
+        
         self.doc = SimpleDocTemplate(
             output_path,
             pagesize=letter,
-            topMargin=0.75*inch,
-            bottomMargin=0.75*inch,
+            topMargin=1.0*inch,  # Increased for branded header
+            bottomMargin=1.0*inch,  # Increased for branded footer
             leftMargin=0.75*inch,
             rightMargin=0.75*inch
         )
@@ -302,9 +314,58 @@ class PDFReportGenerator:
         # All Buildings Summary Table
         self._add_all_buildings_table(metrics)
 
-        # Build PDF
-        self.doc.build(self.story)
+        # Build PDF with branded header/footer
+        self.doc.build(self.story, onFirstPage=self._add_page_branding, onLaterPages=self._add_page_branding)
         logger.info(f"Report generated successfully: {self.output_path}")
+    
+    def _add_page_branding(self, canvas_obj, doc) -> None:
+        """
+        Add Cisco branded header and footer to each page.
+        
+        Parameters:
+            canvas_obj: ReportLab canvas object
+            doc: Document template
+            
+        Returns:
+            None
+        """
+        canvas_obj.saveState()
+        
+        # Page dimensions
+        page_width, page_height = letter
+        
+        # Branded header line (Cisco blue)
+        canvas_obj.setStrokeColor(COLORS['cisco_blue'])
+        canvas_obj.setLineWidth(3)
+        canvas_obj.line(0.5*inch, page_height - 0.5*inch, page_width - 0.5*inch, page_height - 0.5*inch)
+        
+        # Footer with Cisco branding
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.setFillColor(COLORS['gray_medium'])
+        
+        # Cisco brand text in footer
+        canvas_obj.setFillColor(COLORS['cisco_blue'])
+        canvas_obj.setFont('Helvetica-Bold', 9)
+        canvas_obj.drawString(0.75*inch, 0.5*inch, "Cisco")
+        
+        # Separator
+        canvas_obj.setFillColor(COLORS['gray_medium'])
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.drawString(1.1*inch, 0.5*inch, "|")  
+        
+        # Report title
+        canvas_obj.drawString(1.3*inch, 0.5*inch, "AI-RRM Performance Report")
+        
+        # Page number (right-aligned)
+        page_num = f"Page {doc.page}"
+        canvas_obj.drawRightString(page_width - 0.75*inch, 0.5*inch, page_num)
+        
+        # Footer line (Cisco blue)
+        canvas_obj.setStrokeColor(COLORS['cisco_blue'])
+        canvas_obj.setLineWidth(1)
+        canvas_obj.line(0.5*inch, 0.65*inch, page_width - 0.5*inch, 0.65*inch)
+        
+        canvas_obj.restoreState()
 
     def _create_stat_box(self, label: str, value: str, color: colors.Color) -> Table:
         """Create a colored stat box for KPI display."""
@@ -328,10 +389,30 @@ class PDFReportGenerator:
         return table
 
     def _add_title_page(self, stats: Dict[str, Any]) -> None:
-        """Add professional title page with branding and introduction."""
+        """Add professional title page with Cisco branding and logo."""
+        # Cisco Logo (if available)
+        if self.logo_path:
+            try:
+                logo = Image(self.logo_path, width=2.5*inch, height=0.8*inch, kind='proportional')
+                logo.hAlign = 'CENTER'
+                self.story.append(Spacer(1, 0.3*inch))
+                self.story.append(logo)
+                self.story.append(Spacer(1, 0.3*inch))
+            except Exception as e:
+                logger.warning(f"Failed to load logo image: {e}")
+                self.story.append(Spacer(1, 0.5*inch))
+        else:
+            # Cisco text branding if no logo
+            cisco_brand = Paragraph(
+                "<font color='#049fd9' size='24'><b>Cisco</b></font>",
+                self.subtitle_style
+            )
+            self.story.append(Spacer(1, 0.3*inch))
+            self.story.append(cisco_brand)
+            self.story.append(Spacer(1, 0.2*inch))
+        
         # Main title
         title = Paragraph("AI-RRM Performance Report", self.title_style)
-        self.story.append(Spacer(1, 0.5*inch))
         self.story.append(title)
 
         # Subtitle with date
